@@ -3,6 +3,7 @@ import consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.log4j.BasicConfigurator;
 import producer.Producer;
 import settings.ServiceHelper;
 import settings.Settings;
@@ -11,7 +12,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -24,39 +24,34 @@ import java.util.concurrent.TimeUnit;
 public class Main {
     private static final String TOPIC = "message";
 
-    private static ExecutorService service = Executors.newSingleThreadExecutor();
     private static ExecutorService es = Executors.newFixedThreadPool(2);
 
     public static void main(String[] args) throws Exception {
+//        BasicConfigurator.configure();
+
         Map<String, String> brokerProps = new HashMap<>();
         brokerProps.put(Settings.KAFKA, "kafka.props");
         brokerProps.put(Settings.ZOOKEEPER, "zk.props");
 
         EventBroker broker = new EventBroker(brokerProps);
-        service.execute(() -> {
-            try {
-                broker.start();
-                broker.createTopic(TOPIC, 1, 1);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-        service.shutdown();
 
-        Thread.sleep(10_000);
+
+        broker.start();
+        broker.createTopic(TOPIC, 1, 1);
 
         Runnable pTask = () -> {
             System.out.println("pTask");
             try {
                 Producer<String, String> producer = new Producer<>(ServiceHelper.loadProperties("producer.props"));
-                for (int i = 0; i < 2000; i++) {
+                for (int i = 0; i < 100; i++) {
+                    Thread.sleep(100);
                     ProducerRecord<String, String> pr = new ProducerRecord<>(TOPIC, "Msg", "send " + String.valueOf(i));
                     producer.send(pr);
                     producer.flush();
                 }
 
                 producer.close();
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         };
@@ -66,11 +61,14 @@ public class Main {
             try {
                 Consumer<String, String> consumer = new Consumer<>(ServiceHelper.loadProperties("consumer.props"));
                 consumer.subscribe(Collections.singletonList(TOPIC));
+
                 ConsumerRecords<String, String> crs = consumer.poll(2000);
                 System.out.println("Records count = " + crs.count());
-//                for (ConsumerRecord<String, String> cr : crs) {
-//                    System.out.println(cr.key() + ": " + cr.value());
-//                }
+                while (crs.iterator().hasNext()) {
+                    ConsumerRecord<String, String> record = crs.iterator().next();
+                    System.out.println(record.key() + ": " + record.value());
+                    crs = consumer.poll(2000);
+                }
 
                 consumer.close();
             } catch (IOException e) {
@@ -79,9 +77,11 @@ public class Main {
         };
 
         es.execute(cTask);
+        Thread.sleep(1000);
         es.execute(pTask);
 
         es.shutdown();
+
         System.out.println("Waiting es");
         es.awaitTermination(60, TimeUnit.MINUTES);
 
@@ -91,8 +91,6 @@ public class Main {
             e.printStackTrace();
         }
 
-        System.out.println("Waiting service to stop");
-        service.awaitTermination(60, TimeUnit.MINUTES);
         System.out.println("End of execution");
     }
 }

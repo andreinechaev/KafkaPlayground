@@ -29,6 +29,7 @@ public class Producer<K, V> implements org.apache.kafka.clients.producer.Produce
         this.mProducer = new KafkaProducer<>(properties);
     }
 
+
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> producerRecord) {
         return mProducer.send(producerRecord);
@@ -63,5 +64,6 @@ public class Producer<K, V> implements org.apache.kafka.clients.producer.Produce
     public void close(long l, TimeUnit timeUnit) {
         mProducer.close(l, timeUnit);
     }
+
 
 }

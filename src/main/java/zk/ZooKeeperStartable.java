@@ -2,9 +2,7 @@ package zk;
 
 import kafka.admin.AdminUtils;
 import kafka.admin.RackAwareMode;
-import kafka.utils.ZKStringSerializer$;
 import kafka.utils.ZkUtils;
-import org.I0Itec.zkclient.ZkClient;
 import org.apache.zookeeper.server.ServerConfig;
 import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.quorum.QuorumPeerConfig;
@@ -28,7 +26,6 @@ public class ZooKeeperStartable {
     private ZooKeeperServerMain mZooKeeperServer;
     private ZkUtils mUtils;
 
-
     public ZooKeeperStartable(Properties properties) throws IOException {
         QuorumPeerConfig quorumConfiguration = new QuorumPeerConfig();
         try {
@@ -41,16 +38,32 @@ public class ZooKeeperStartable {
         mConfiguration.readFrom(quorumConfiguration);
     }
 
+    public String getHostAddress() {
+        return mConfiguration.getClientPortAddress().getHostName()
+                + ":"
+                + mConfiguration.getClientPortAddress().getPort();
+    }
+
+    public ZkUtils getUtils() {
+        return mUtils;
+    }
+
+    public void setUtils(ZkUtils mUtils) {
+        this.mUtils = mUtils;
+    }
+
     public void createTopic(String name, int partition, int replication) {
+        if (AdminUtils.topicExists(mUtils, name)) return;
+
         AdminUtils.createTopic(mUtils, name, partition, replication, new Properties(), RackAwareMode.Disabled$.MODULE$);
     }
 
-    public void start() throws Exception {
+    public Runnable start() throws Exception {
         if (mZooKeeperServer == null) {
             throw new Exception("ZooKeeper failed");
         }
 
-        Runnable task = () -> {
+        return () -> {
             System.out.println("Zookeeper started");
             try {
                 mZooKeeperServer.runFromConfig(mConfiguration);
@@ -58,21 +71,11 @@ public class ZooKeeperStartable {
                 ie.printStackTrace();
             }
         };
-
-        mServiceExecutor.execute(task);
-
-        String serverAddress = mConfiguration.getClientPortAddress().getHostName()
-                + ":"
-                + mConfiguration.getClientPortAddress().getPort();
-
-        System.out.println(serverAddress);
-        ZkClient client = new ZkClient(serverAddress, 30_000, 30_000, ZKStringSerializer$.MODULE$);
-        mUtils = ZkUtils.apply(client, false);
     }
 
     public void stop() throws InterruptedException {
         try {
-            // Mm.. Don't do it unless you really need it
+            // Using protected method of ZooKeeperServerMain class via reflection
             Method shutdown = ZooKeeperServerMain.class.getDeclaredMethod("shutdown");
             shutdown.setAccessible(true);
             shutdown.invoke(mZooKeeperServer);
@@ -83,9 +86,4 @@ public class ZooKeeperStartable {
         mServiceExecutor.shutdown();
         mServiceExecutor.awaitTermination(60, TimeUnit.MINUTES);
     }
-
-    public boolean isRunning() {
-        return !mServiceExecutor.isShutdown();
-    }
-
 }
