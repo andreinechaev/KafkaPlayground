@@ -79,6 +79,13 @@ public class EventBroker {
     }
 
     public void createTopic(String name, int partition, int replication) {
-        mInternalService.execute(() -> mZKServer.createTopic(name, partition, replication));
+        mInternalService.execute(() -> {
+            try {
+                mZKServer.createTopic(name, partition, replication);
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.exit(7);
+            }
+        });
     }
 }

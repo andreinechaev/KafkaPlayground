@@ -1,5 +1,6 @@
 package zk;
 
+import com.sun.istack.internal.NotNull;
 import kafka.admin.AdminUtils;
 import kafka.admin.RackAwareMode;
 import kafka.utils.ZkUtils;
@@ -48,11 +49,15 @@ public class ZooKeeperStartable {
         return mUtils;
     }
 
-    public void setUtils(ZkUtils mUtils) {
+    public void setUtils(@NotNull ZkUtils mUtils) {
         this.mUtils = mUtils;
     }
 
-    public void createTopic(String name, int partition, int replication) {
+    public void createTopic(String name, int partition, int replication) throws Exception {
+        if (mUtils == null) {
+            throw new Exception("ZkUtils is not assigned to " + ZooKeeperStartable.class.getName());
+        }
+
         if (AdminUtils.topicExists(mUtils, name)) return;
 
         AdminUtils.createTopic(mUtils, name, partition, replication, new Properties(), RackAwareMode.Disabled$.MODULE$);
